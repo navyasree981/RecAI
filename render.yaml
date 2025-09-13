@@ -1,0 +1,14 @@
+services:
+  - type: web
+    name: places-emotion-recommender
+    env: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: python main.py
+    plan: free
+    envVars:
+      - key: MONGODB_URI
+        sync: false
+      - key: PORT
+        value: 10000
+      - key: RENDER
+        value: true

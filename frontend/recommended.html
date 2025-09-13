@@ -1,0 +1,91 @@
+<body>
+  <h2 class="title">🌟 recAI - Top 20 Recommended Places 🌟</h2>
+  <div id="recommendationsContainer" class="grid"></div>
+
+  <style>
+    body {
+      font-family: "Inter", sans-serif;
+      background: #091921;
+      margin: 0;
+      padding: 40px 20px;
+      color: #eee;
+    }
+
+    .title {
+      text-align: center;
+      margin-bottom: 40px;
+      font-size: 30px;
+      font-weight: 600;
+      color: #7d8ca1;
+      font-family: "Inter", sans-serif;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+      gap: 24px;
+      max-width: 1280px;
+      margin: 0 auto;
+    }
+
+    .card {
+      background-color: #0f222f;
+      padding: 24px 28px;
+      border-radius: 16px;
+      box-shadow: 0px 12px 17px rgba(17, 32, 51, 0.65);
+      color: white;
+      transition: transform 0.3s ease, box-shadow 0.3s ease;
+      font-family: "Inter", sans-serif;
+    }
+
+    .card:hover {
+      transform: translateY(-7px);
+      box-shadow: 0 15px 25px rgba(25, 45, 65, 0.8);
+    }
+
+    .card h3 {
+      font-size: 22px;
+      font-weight: 700;
+      color: #82ccdd;
+      margin-top: 0;
+      margin-bottom: 12px;
+    }
+
+    .card p {
+      font-size: 15px;
+      line-height: 1.5;
+      margin: 8px 0;
+      color: #c6d0db;
+    }
+
+    .card b {
+      color: #a3b1c1;
+      font-weight: 600;
+    }
+  </style>
+
+  <script>
+    const recs = JSON.parse(localStorage.getItem("recommendations")) || [];
+    const container = document.getElementById("recommendationsContainer");
+
+    if (recs.length === 0) {
+      container.innerHTML = "<p>No recommendations available.</p>";
+    } else {
+      recs.forEach((place) => {
+        const card = document.createElement("div");
+        card.className = "card";
+        card.innerHTML = `
+          <h3>${place.name}</h3>
+          <p><b>Category:</b> ${place.category}</p>
+          <p><b>Description:</b> ${place.description}</p>
+          <p><b>Similarity:</b> ${place.similarity}</p>
+          <p><b>Emotions:</b> ${place.emotions
+            .map((e) => `${e.emotion} (${e.confidence.toFixed(2)})`)
+            .join(", ")}</p>
+          <p><b>Location:</b> (${place.lat}, ${place.lon})</p>
+        `;
+        container.appendChild(card);
+      });
+    }
+  </script>
+</body>
