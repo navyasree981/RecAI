@@ -1224,15 +1224,16 @@ def open_frontend():
 # 14. Run app - Modified for Render deployment
 # -------------------------------
 if __name__ == "__main__":
-    print("Starting Enhanced Places Emotion Recommender System with Context-Aware Analysis and Location Caching...")
-    print("Features: Name + Description combination, Context-aware transformers, Enhanced emotion mapping, 1km proximity caching")
+    print("Starting Enhanced Places Emotion Recommender System...")
+    print("Features: Context-aware analysis with Location Caching")
     
-    # Only start browser thread in local development
+    # Don't start browser thread in production
     if os.getenv("RENDER") != "true":
         threading.Thread(target=open_frontend, daemon=True).start()
     
-    # Use environment variable for port (required for Render)
+    # Get port from environment (required for Render)
     port = int(os.getenv("PORT", 8000))
-    host = "0.0.0.0"  # Required for Render deployment
+    host = "0.0.0.0"
     
-    uvicorn.run(app, host=host, port=port, reload=False)  # Disable reload for production
+    print(f"Starting server on {host}:{port}")
+    uvicorn.run(app, host=host, port=port, reload=False)
