@@ -16,6 +16,7 @@ from sentence_transformers import SentenceTransformer, util
 from typing import List, Dict
 import logging
 from math import sqrt, radians, cos, sin, asin
+import tempfile
 
 # Setup logging
 logging.basicConfig(level=logging.INFO)
@@ -36,7 +37,7 @@ app.add_middleware(
 )
 
 # -------------------------------
-# 2. MongoDB setup - Use environment variable for production
+# 2. MongoDB setup - Use HF Secrets for production
 # -------------------------------
 MONGO_URI = os.getenv("MONGODB_URI", "mongodb+srv://navyasree:Jungkook1!@cloudwatch.tom4vt5.mongodb.net/")
 client = MongoClient(MONGO_URI)
@@ -46,12 +47,10 @@ places_collection = db["nearby_places"]
 location_cache_collection = db["location_cache"]
 
 # -------------------------------
-# 3. Location caching utility functions (NEW)
+# 3. Location caching utility functions
 # -------------------------------
 def calculate_distance_km(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
-    """
-    Calculate the great circle distance between two points on earth in kilometers
-    """
+    """Calculate the great circle distance between two points on earth in kilometers"""
     # Convert decimal degrees to radians
     lat1, lon1, lat2, lon2 = map(radians, [lat1, lon1, lat2, lon2])
     
@@ -66,9 +65,7 @@ def calculate_distance_km(lat1: float, lon1: float, lat2: float, lon2: float) ->
     return c * r
 
 def get_cached_location():
-    """
-    Get the last cached location from database
-    """
+    """Get the last cached location from database"""
     try:
         cached = location_cache_collection.find_one({}, sort=[("timestamp", -1)])
         if cached:
@@ -80,13 +77,11 @@ def get_cached_location():
             }
         return None
     except Exception as e:
-        print(f"Error getting cached location: {e}")
+        logger.error(f"Error getting cached location: {e}")
         return None
 
 def save_location_cache(latitude: float, longitude: float, places_count: int):
-    """
-    Save current location to cache
-    """
+    """Save current location to cache"""
     try:
         cache_data = {
             "latitude": latitude,
@@ -95,28 +90,23 @@ def save_location_cache(latitude: float, longitude: float, places_count: int):
             "places_count": places_count
         }
         location_cache_collection.insert_one(cache_data)
-        print(f"Saved location cache: {latitude}, {longitude} with {places_count} places")
+        logger.info(f"Saved location cache: {latitude}, {longitude} with {places_count} places")
     except Exception as e:
-        print(f"Error saving location cache: {e}")
+        logger.error(f"Error saving location cache: {e}")
 
 def is_within_proximity(current_lat: float, current_lon: float, cached_lat: float, cached_lon: float, proximity_km: float = 1.0) -> bool:
-    """
-    Check if current location is within proximity of cached location
-    """
+    """Check if current location is within proximity of cached location"""
     distance = calculate_distance_km(current_lat, current_lon, cached_lat, cached_lon)
-    print(f"Distance from cached location: {distance:.2f} km")
+    logger.info(f"Distance from cached location: {distance:.2f} km")
     return distance <= proximity_km
 
 # -------------------------------
 # 4. Enhanced Place Information Fetcher
 # -------------------------------
 def get_place_details_from_overpass(place_id: str, place_type: str) -> Dict[str, str]:
-    """
-    Fetch detailed information about a place using Overpass API
-    """
+    """Fetch detailed information about a place using Overpass API"""
     overpass_url = "https://overpass-api.de/api/interpreter"
     
-    # Query for detailed information
     query = f"""
 [out:json][timeout:15];
 {place_type}({place_id});
@@ -134,7 +124,6 @@ out tags;
             # Extract description from various tag sources
             description_parts = []
             
-            # Primary description sources
             if tags.get("description"):
                 description_parts.append(tags["description"])
             if tags.get("tourism:description"):
@@ -152,66 +141,50 @@ out tags;
             # Service/facility information
             if tags.get("amenity"):
                 amenity = tags["amenity"]
-                if amenity == "restaurant":
-                    context_parts.append("dining establishment")
-                elif amenity == "cafe":
-                    context_parts.append("coffee shop and casual dining")
-                elif amenity == "hospital":
-                    context_parts.append("medical care facility")
-                elif amenity == "bank":
-                    context_parts.append("financial services")
-                elif amenity == "pharmacy":
-                    context_parts.append("medication and health products")
-                elif amenity == "school":
-                    context_parts.append("educational institution")
-                elif amenity == "library":
-                    context_parts.append("books and study facility")
-                elif amenity == "gym":
-                    context_parts.append("fitness and exercise facility")
-                else:
-                    context_parts.append(f"{amenity} facility")
+                amenity_descriptions = {
+                    "restaurant": "dining establishment",
+                    "cafe": "coffee shop and casual dining",
+                    "hospital": "medical care facility",
+                    "bank": "financial services",
+                    "pharmacy": "medication and health products",
+                    "school": "educational institution",
+                    "library": "books and study facility",
+                    "gym": "fitness and exercise facility"
+                }
+                context_parts.append(amenity_descriptions.get(amenity, f"{amenity} facility"))
             
             # Tourism information
             if tags.get("tourism"):
                 tourism = tags["tourism"]
-                if tourism == "hotel":
-                    context_parts.append("accommodation and lodging")
-                elif tourism == "museum":
-                    context_parts.append("cultural exhibitions and artifacts")
-                elif tourism == "attraction":
-                    context_parts.append("tourist destination and sightseeing")
-                elif tourism == "viewpoint":
-                    context_parts.append("scenic overlook with views")
-                else:
-                    context_parts.append(f"{tourism} destination")
+                tourism_descriptions = {
+                    "hotel": "accommodation and lodging",
+                    "museum": "cultural exhibitions and artifacts",
+                    "attraction": "tourist destination and sightseeing",
+                    "viewpoint": "scenic overlook with views"
+                }
+                context_parts.append(tourism_descriptions.get(tourism, f"{tourism} destination"))
             
             # Leisure information
             if tags.get("leisure"):
                 leisure = tags["leisure"]
-                if leisure == "park":
-                    context_parts.append("outdoor recreation and nature")
-                elif leisure == "sports_centre":
-                    context_parts.append("sports activities and fitness")
-                elif leisure == "swimming_pool":
-                    context_parts.append("swimming and water activities")
-                elif leisure == "garden":
-                    context_parts.append("landscaped outdoor space")
-                else:
-                    context_parts.append(f"{leisure} activity")
+                leisure_descriptions = {
+                    "park": "outdoor recreation and nature",
+                    "sports_centre": "sports activities and fitness",
+                    "swimming_pool": "swimming and water activities",
+                    "garden": "landscaped outdoor space"
+                }
+                context_parts.append(leisure_descriptions.get(leisure, f"{leisure} activity"))
             
             # Shop information
             if tags.get("shop"):
                 shop = tags["shop"]
-                if shop == "mall":
-                    context_parts.append("shopping center with multiple stores")
-                elif shop == "supermarket":
-                    context_parts.append("grocery and daily necessities")
-                elif shop == "clothes":
-                    context_parts.append("clothing and fashion retail")
-                elif shop == "book":
-                    context_parts.append("books and reading materials")
-                else:
-                    context_parts.append(f"{shop} retail store")
+                shop_descriptions = {
+                    "mall": "shopping center with multiple stores",
+                    "supermarket": "grocery and daily necessities",
+                    "clothes": "clothing and fashion retail",
+                    "book": "books and reading materials"
+                }
+                context_parts.append(shop_descriptions.get(shop, f"{shop} retail store"))
             
             # Additional contextual information
             if tags.get("building"):
@@ -237,7 +210,7 @@ out tags;
                 "raw_tags": tags
             }
     except Exception as e:
-        print(f"Could not fetch detailed info: {e}")
+        logger.warning(f"Could not fetch detailed info: {e}")
         return {"description": "", "raw_tags": {}}
     
     return {"description": "", "raw_tags": {}}
@@ -256,17 +229,17 @@ class PlaceEmotionAnalyzer:
         try:
             # Using a more context-aware model for better understanding
             self.model = SentenceTransformer("all-mpnet-base-v2")
-            print("Loaded context-aware emotion analysis model successfully")
+            logger.info("Loaded context-aware emotion analysis model successfully")
         except Exception as e:
-            print(f"Error loading model: {e}")
+            logger.error(f"Error loading model: {e}")
             raise
     
     def _load_reference_data(self):
-        # Try to load from data directory first, then fallback to current directory
+        # For Hugging Face Spaces, look for files in the app directory
         possible_paths = [
-            "data/df_result.xlsx",  # Render deployment path
-            "df_result.xlsx",       # Fallback
-            os.path.join(os.getcwd(), "data", "df_result.xlsx")  # Local development
+            "df_result.xlsx",  # HF Spaces deployment path
+            "data/df_result.xlsx",  # Alternative path
+            os.path.join(os.getcwd(), "df_result.xlsx")  # Current directory
         ]
         
         for file_path in possible_paths:
@@ -283,45 +256,37 @@ class PlaceEmotionAnalyzer:
                     else:
                         df_result['text_for_embedding'] = df_result['category_combined'].astype(str)
                     
-                    print("Computing embeddings for reference data...")
+                    logger.info("Computing embeddings for reference data...")
                     self.reference_embeddings = self.model.encode(
                         df_result['text_for_embedding'].tolist(), 
                         convert_to_tensor=True
                     )
                     self.reference_data = df_result
-                    print(f"Loaded {len(df_result)} reference places with emotions from {file_path}")
+                    logger.info(f"Loaded {len(df_result)} reference places with emotions from {file_path}")
                     return
             except Exception as e:
-                print(f"Error loading reference data from {file_path}: {e}")
+                logger.warning(f"Error loading reference data from {file_path}: {e}")
                 continue
         
-        print("Reference dataset not found, using enhanced emotion mapping")
+        logger.info("Reference dataset not found, using enhanced emotion mapping")
         self.reference_data = None
     
     def create_context_aware_text(self, place_name: str, place_category: str, place_description: str = None, tags: Dict = None) -> str:
-        """
-        Create a rich, context-aware text representation of the place
-        """
-        # Start with name and category
+        """Create a rich, context-aware text representation of the place"""
         context_text = f"{place_name} is a {place_category}"
         
-        # Add description if available
         if place_description and place_description.strip():
             context_text += f". {place_description}"
         
-        # Add contextual information from tags
         if tags:
             context_additions = []
             
-            # Add opening hours context
             if tags.get("opening_hours"):
                 context_additions.append("operates with specific hours")
             
-            # Add accessibility info
             if tags.get("wheelchair") == "yes":
                 context_additions.append("wheelchair accessible")
             
-            # Add atmosphere indicators
             if tags.get("outdoor_seating") == "yes":
                 context_additions.append("offers outdoor seating")
             if tags.get("takeaway") == "yes":
@@ -329,17 +294,20 @@ class PlaceEmotionAnalyzer:
             if tags.get("wifi") == "yes":
                 context_additions.append("has wifi connectivity")
             
-            # Add price indicators
             if tags.get("price_range"):
                 price = tags["price_range"]
-                if price in ["$", "cheap"]:
-                    context_additions.append("budget-friendly pricing")
-                elif price in ["$$", "moderate"]:
-                    context_additions.append("moderate pricing")
-                elif price in ["$$$", "$$$$", "expensive"]:
-                    context_additions.append("upscale pricing")
+                price_descriptions = {
+                    "$": "budget-friendly pricing",
+                    "cheap": "budget-friendly pricing",
+                    "$$": "moderate pricing",
+                    "moderate": "moderate pricing",
+                    "$$$": "upscale pricing",
+                    "$$$$": "upscale pricing",
+                    "expensive": "upscale pricing"
+                }
+                if price in price_descriptions:
+                    context_additions.append(price_descriptions[price])
             
-            # Add brand/chain context
             if tags.get("brand"):
                 context_additions.append(f"part of {tags['brand']} chain")
             
@@ -350,15 +318,12 @@ class PlaceEmotionAnalyzer:
     
     def predict_emotions_for_place(self, place_name: str, place_category: str, 
                                    place_description: str = None, tags: Dict = None) -> List[Dict]:
-        """
-        Enhanced emotion prediction using context-aware text analysis
-        """
-        # Create rich context-aware text
+        """Enhanced emotion prediction using context-aware text analysis"""
         context_aware_text = self.create_context_aware_text(
             place_name, place_category, place_description, tags
         )
         
-        print(f"Context text for {place_name}: {context_aware_text[:100]}...")
+        logger.debug(f"Context text for {place_name}: {context_aware_text[:100]}...")
         
         try:
             if self.reference_data is not None:
@@ -366,20 +331,18 @@ class PlaceEmotionAnalyzer:
             else:
                 return self._get_enhanced_emotions_from_context(context_aware_text, place_category, tags)
         except Exception as e:
-            print(f"Error predicting emotions for {place_name}: {e}")
+            logger.error(f"Error predicting emotions for {place_name}: {e}")
             return [{"emotion": "neutral", "confidence": 0.5}]
     
     def _get_emotions_from_similarity(self, context_text: str, top_k: int = 3) -> List[Dict]:
-        """
-        Use semantic similarity with reference data for emotion prediction
-        """
+        """Use semantic similarity with reference data for emotion prediction"""
         place_embedding = self.model.encode(context_text, convert_to_tensor=True)
         cosine_scores = util.cos_sim(place_embedding, self.reference_embeddings)[0]
         top_results = torch.topk(cosine_scores, k=min(top_k * 3, len(cosine_scores)))
         
         emotion_scores = {}
         for score, idx in zip(top_results.values, top_results.indices):
-            if score.item() > 0.2:  # Lower threshold for more nuanced matching
+            if score.item() > 0.2:
                 emotion = self.reference_data.iloc[idx.item()]['place_emotion']
                 confidence = float(score.item())
                 if emotion in emotion_scores:
@@ -397,47 +360,31 @@ class PlaceEmotionAnalyzer:
         emotions = []
         context_lower = context_text.lower()
         
-        if any(word in context_lower for word in ["temple", "church", "mosque", "worship", "spiritual", "shrine", "monastery", "cathedral"]):
-            emotions.append({"emotion": "spirituality", "confidence": 0.9})
-            emotions.append({"emotion": "contemplative", "confidence": 0.8})
-            emotions.append({"emotion": "peaceful", "confidence": 0.7})
+        # Define emotion mapping patterns
+        emotion_patterns = {
+            ("spirituality", "contemplative", "peaceful"): ["temple", "church", "mosque", "worship", "spiritual", "shrine", "monastery", "cathedral"],
+            ("calm", "peaceful", "relaxed"): ["park", "garden", "outdoor", "nature", "scenic", "viewpoint", "spa", "wellness"],
+            ("social", "comfort"): ["restaurant", "cafe", "dining", "food", "cuisine"],
+            ("curious", "contemplative"): ["museum", "cultural", "exhibition", "library", "educational"],
+            ("energetic", "confident"): ["gym", "fitness", "sports", "exercise", "swimming"],
+            ("excitement", "social"): ["shop", "mall", "retail", "store"],
+            ("excitement", "joy"): ["cinema", "theater", "entertainment", "attraction"],
+            ("comfort", "relaxed"): ["hotel", "accommodation", "lodging"]
+        }
         
-        if any(word in context_lower for word in ["park", "garden", "outdoor", "nature", "scenic", "viewpoint", "spa", "wellness"]):
-            emotions.append({"emotion": "calm", "confidence": 0.9})
-            emotions.append({"emotion": "peaceful", "confidence": 0.8})
-            emotions.append({"emotion": "relaxed", "confidence": 0.8})
-        
-        if any(word in context_lower for word in ["restaurant", "cafe", "dining", "food", "cuisine"]):
-            emotions.append({"emotion": "social", "confidence": 0.8})
-            emotions.append({"emotion": "comfort", "confidence": 0.7})
-            if "upscale" in context_lower or "fine dining" in context_lower:
-                emotions.append({"emotion": "luxury", "confidence": 0.8})
-        
-        if any(word in context_lower for word in ["museum", "cultural", "exhibition", "library", "educational"]):
-            emotions.append({"emotion": "curious", "confidence": 0.8})
-            emotions.append({"emotion": "contemplative", "confidence": 0.7})
-        
-        if any(word in context_lower for word in ["gym", "fitness", "sports", "exercise", "swimming"]):
-            emotions.append({"emotion": "energetic", "confidence": 0.9})
-            emotions.append({"emotion": "confident", "confidence": 0.7})
-        
-        if any(word in context_lower for word in ["shop", "mall", "retail", "store"]):
-            emotions.append({"emotion": "excitement", "confidence": 0.7})
-            emotions.append({"emotion": "social", "confidence": 0.6})
-        
-        if any(word in context_lower for word in ["cinema", "theater", "entertainment", "attraction"]):
-            emotions.append({"emotion": "excitement", "confidence": 0.8})
-            emotions.append({"emotion": "joy", "confidence": 0.7})
-        
-        if any(word in context_lower for word in ["hotel", "accommodation", "lodging"]):
-            emotions.append({"emotion": "comfort", "confidence": 0.8})
-            emotions.append({"emotion": "relaxed", "confidence": 0.7})
+        for emotion_group, keywords in emotion_patterns.items():
+            if any(word in context_lower for word in keywords):
+                for i, emotion in enumerate(emotion_group):
+                    confidence = 0.9 - (i * 0.1)  # Decreasing confidence for additional emotions
+                    emotions.append({"emotion": emotion, "confidence": confidence})
+                break
         
         if not emotions:
             emotions = [{"emotion": "neutral", "confidence": 0.5}]
         
         return sorted(emotions, key=lambda x: x["confidence"], reverse=True)[:3]
 
+# Initialize the emotion analyzer
 emotion_analyzer = PlaceEmotionAnalyzer()
 
 # -------------------------------
@@ -455,12 +402,11 @@ class UserPreference(BaseModel):
     timestamp: str = None
 
 # -------------------------------
-# 7. Enhanced fetch nearby places with detailed context and caching (MODIFIED)
+# 7. Enhanced fetch nearby places with detailed context and caching
 # -------------------------------
-def get_nearby_places_with_emotions(lat, lon, radius=1000):  # Changed to 1km radius
+def get_nearby_places_with_emotions(lat, lon, radius=1000):
     overpass_url = "https://overpass-api.de/api/interpreter"
     
-    # Enhanced query to get more detailed information
     query = f"""
 [out:json][timeout:30];
 (
@@ -477,13 +423,13 @@ out center tags 100;
 """
 
     try:
-        print("Fetching places from OpenStreetMap with detailed information...")
+        logger.info("Fetching places from OpenStreetMap with detailed information...")
         response = requests.get(overpass_url, params={"data": query}, timeout=40)
         response.raise_for_status()
         data = response.json()
-        print(f"Found {len(data.get('elements', []))} raw places")
+        logger.info(f"Found {len(data.get('elements', []))} raw places")
     except Exception as e:
-        print(f"Error fetching places: {e}")
+        logger.error(f"Error fetching places: {e}")
         return []
     
     places_with_emotions = []
@@ -493,44 +439,36 @@ out center tags 100;
         tags = element.get("tags", {})
         name = tags.get("name", "").strip()
         
-        # Skip places without names or already processed
         if not name or name in processed_names:
             continue
         processed_names.add(name)
         
-        # Get primary category
         category = (tags.get("amenity") or tags.get("tourism") or 
                     tags.get("leisure") or tags.get("shop") or "unknown")
         
-        # Skip unknown categories
         if category.lower() == "unknown":
             continue
         
-        # Get coordinates
         lat_val = element.get("lat") or element.get("center", {}).get("lat")
         lon_val = element.get("lon") or element.get("center", {}).get("lon")
         
-        # Create initial description from tags
         initial_description = f"{name} - {category}"
         if tags.get("cuisine"):
             initial_description += f" ({tags.get('cuisine')})"
         
-        # Get enhanced place details
         element_type = element.get("type", "node")
         element_id = element.get("id")
         
-        print(f"Fetching detailed info for: {name}")
+        logger.debug(f"Fetching detailed info for: {name}")
         place_details = get_place_details_from_overpass(element_id, element_type)
         
-        # Combine name with enhanced description
         enhanced_description = place_details.get("description", "")
         if not enhanced_description:
             enhanced_description = initial_description
         else:
             enhanced_description = f"{initial_description}. {enhanced_description}"
         
-        # Create combined context text for emotion analysis
-        print(f"Analyzing emotions for: {name}")
+        logger.debug(f"Analyzing emotions for: {name}")
         emotions = emotion_analyzer.predict_emotions_for_place(
             name, category, enhanced_description, tags
         )
@@ -552,19 +490,18 @@ out center tags 100;
         }
         places_with_emotions.append(place_data)
     
-    print(f"Processed {len(places_with_emotions)} unique places with context-aware emotions")
+    logger.info(f"Processed {len(places_with_emotions)} unique places with context-aware emotions")
     return places_with_emotions
 
 # -------------------------------
-# 8. API endpoints with location caching (MODIFIED)
+# 8. API endpoints with location caching
 # -------------------------------
 @app.post("/fetch_places")
 def fetch_and_store_places_with_emotions(loc: Location):
     try:
         lat, lon = loc.latitude, loc.longitude
-        print(f"Fetch request for coordinates: {lat}, {lon}")
+        logger.info(f"Fetch request for coordinates: {lat}, {lon}")
         
-        # Check cached location
         cached_location = get_cached_location()
         
         if cached_location:
@@ -572,11 +509,10 @@ def fetch_and_store_places_with_emotions(loc: Location):
             cached_lon = cached_location["longitude"]
             places_count = cached_location["places_count"]
             
-            print(f"Found cached location: {cached_lat}, {cached_lon} with {places_count} places")
+            logger.info(f"Found cached location: {cached_lat}, {cached_lon} with {places_count} places")
             
-            # Check if current location is within 1km of cached location
             if is_within_proximity(lat, lon, cached_lat, cached_lon, 1.0):
-                print("Current location is within 1km of cached location - using existing data")
+                logger.info("Current location is within 1km of cached location - using existing data")
                 existing_places = list(places_collection.find({}, {"_id": 0}))
                 
                 if existing_places:
@@ -588,32 +524,30 @@ def fetch_and_store_places_with_emotions(loc: Location):
                         "distance_from_cache": round(calculate_distance_km(lat, lon, cached_lat, cached_lon), 2)
                     }
         
-        # If we reach here, either no cache exists or user moved >1km away
-        print("Fetching new places data...")
+        logger.info("Fetching new places data...")
         places = get_nearby_places_with_emotions(lat, lon)
         
         if not places:
-            print("No places found nearby")
+            logger.info("No places found nearby")
             return {"status": "success", "message": "No places found nearby", "total_places": 0, "cache_used": False}
         
-        # Clear existing data and store new places
         places_collection.delete_many({})
         result = places_collection.insert_many(places)
         
-        # Save new location to cache
         save_location_cache(lat, lon, len(places))
         
-        print(f"Stored {len(result.inserted_ids)} new places in database")
+        logger.info(f"Stored {len(result.inserted_ids)} new places in database")
         
-        # Save to Excel if possible (optional for cloud deployment)
+        # For Hugging Face Spaces, use tempfile for Excel export
+        excel_path = "N/A"
         try:
             df = pd.DataFrame(places)
-            excel_path = os.path.join(os.getcwd(), "places_with_enhanced_emotions.xlsx")
-            df.to_excel(excel_path, index=False)
-            print(f"Saved enhanced report to: {excel_path}")
+            with tempfile.NamedTemporaryFile(delete=False, suffix='.xlsx') as tmp_file:
+                df.to_excel(tmp_file.name, index=False)
+                excel_path = tmp_file.name
+            logger.info(f"Saved enhanced report to temporary file: {excel_path}")
         except Exception as e:
-            print(f"Could not save Excel file: {e}")
-            excel_path = "N/A"
+            logger.warning(f"Could not save Excel file: {e}")
         
         return {
             "status": "success",
@@ -623,7 +557,7 @@ def fetch_and_store_places_with_emotions(loc: Location):
             "excel_file": excel_path
         }
     except Exception as e:
-        print(f"Error in fetch_and_store_places_with_emotions: {e}")
+        logger.error(f"Error in fetch_and_store_places_with_emotions: {e}")
         return {"status": "error", "message": str(e), "total_places": 0, "cache_used": False}
 
 @app.get("/places")
@@ -647,9 +581,210 @@ def get_all_places_with_emotions():
             "emotion_summary": {"unique_emotions": list(all_emotions), "emotion_frequency": emotion_counts}
         }
     except Exception as e:
-        print(f"Error retrieving places: {e}")
+        logger.error(f"Error retrieving places: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
+# -------------------------------
+# 9. Recommendation System Functions
+# -------------------------------
+def calculate_emotion_match_score(user_emotions: List[str], place_emotion_vector: Dict[str, float]) -> Dict[str, float]:
+    """Calculate detailed matching scores between user emotions and place emotions"""
+    emotion_mapping = {
+        "Joy/Happy": ["joy, happy", "joy", "happy", "entertainment"],
+        "Relaxation/Calm": ["relaxation,calm", "relaxation", "calm", "comfort", "wellness"],
+        "Social Emotion": ["social", "food", "entertainment"],
+        "Excitement": ["excitement", "adventure", "entertainment"],
+        "Comfort": ["comfort", "wellness"],
+        "Adventure": ["adventure", "excitement", "energy"],
+        "Romance": ["luxury", "comfort"],
+        "Luxury": ["luxury", "comfort"],
+        "Shopping": ["shopping", "retail", "convenience"],
+        "Nostalgia": ["comfort"],
+        "Energy": ["energy", "excitement", "adventure","wellness"],
+        "Wellness": ["wellness", "healthcare"],
+        "Entertainment": ["entertainment", "excitement", "joy, happy"],
+        "Exploration": ["adventure", "education", "excitement"],
+        "Fear": ["fear", "stress"],
+        "Creativity": ["education", "entertainment"],
+        "Spirituality": ["spirituality","relaxation,calm"],
+        "Education": ["education", "professional"],
+        "Retail": ["retail", "shopping", "convenience"],
+        "Outdoors": ["adventure", "energy", "excitement"]
+    }
+    
+    user_backend_emotions = []
+    for emotion in user_emotions:
+        mapped = emotion_mapping.get(emotion, [emotion.lower()])
+        user_backend_emotions.extend(mapped)
+    
+    filtered_place_vector = {k: v for k, v in place_emotion_vector.items() 
+                           if k != "neutral" and v > 0.2}
+    
+    if not filtered_place_vector:
+        return {
+            "exact_matches": 0,
+            "exact_match_score": 0.0,
+            "weighted_score": 0.0,
+            "coverage_score": 0.0,
+            "final_score": 0.0,
+            "matched_emotions": []
+        }
+    
+    exact_matches = []
+    exact_match_score = 0.0
+    
+    for user_emotion in user_backend_emotions:
+        if user_emotion in filtered_place_vector:
+            confidence = filtered_place_vector[user_emotion]
+            exact_matches.append((user_emotion, confidence))
+            exact_match_score += confidence
+    
+    weighted_score = exact_match_score * (1 + 0.5 * len(exact_matches))
+    coverage_score = len(exact_matches) / len(set(user_backend_emotions)) if user_backend_emotions else 0
+    
+    final_score = (
+        exact_match_score * 0.4 +
+        weighted_score * 0.4 +
+        coverage_score * 0.2
+    )
+    
+    return {
+        "exact_matches": len(exact_matches),
+        "exact_match_score": round(exact_match_score, 3),
+        "weighted_score": round(weighted_score, 3),
+        "coverage_score": round(coverage_score, 3),
+        "final_score": round(final_score, 3),
+        "matched_emotions": exact_matches
+    }
+
+def rank_places_by_emotion_priority(places: List[Dict], user_emotions: List[str]) -> List[Dict]:
+    """Rank places with priority system - only include places where user emotions are dominant"""
+    scored_places = []
+    
+    logger.info(f"Starting with {len(places)} places")
+    logger.info(f"User selected emotions: {user_emotions}")
+    
+    emotion_mapping = {
+        "Joy/Happy": ["joy, happy", "joy", "happy", "entertainment"],
+        "Relaxation/Calm": ["relaxation,calm", "relaxation", "calm", "comfort", "wellness"],
+        "Social Emotion": ["social", "food", "entertainment"],
+        "Excitement": ["excitement", "adventure", "entertainment"],
+        "Comfort": ["comfort", "wellness"],
+        "Adventure": ["adventure", "excitement", "energy"],
+        "Romance": ["luxury", "comfort"],
+        "Luxury": ["luxury", "comfort"],
+        "Shopping": ["shopping", "retail", "convenience"],
+        "Nostalgia": ["comfort"],
+        "Energy": ["energy", "excitement", "adventure","wellness"],
+        "Wellness": ["wellness", "healthcare"],
+        "Entertainment": ["entertainment", "excitement", "joy, happy"],
+        "Exploration": ["adventure", "education", "excitement"],
+        "Fear": ["fear", "stress"],
+        "Creativity": ["education", "entertainment"],
+        "Spirituality": ["spirituality","relaxation,calm"],
+        "Education": ["education", "professional"],
+        "Retail": ["retail", "shopping", "convenience"],
+        "Outdoors": ["adventure", "energy", "excitement"]
+    }
+    
+    user_backend_emotions = set()
+    for emotion in user_emotions:
+        mapped = emotion_mapping.get(emotion, [emotion.lower()])
+        user_backend_emotions.update(mapped)
+    
+    for place in places:
+        emotion_vector = place.get("emotion_vector", {})
+        place_name = place.get('name', 'Unknown')
+        
+        if not emotion_vector or (len(emotion_vector) == 1 and "neutral" in emotion_vector):
+            continue
+        
+        max_confidence = max(emotion_vector.values())
+        dominant_emotions = [emotion for emotion, confidence in emotion_vector.items() 
+                           if confidence == max_confidence and emotion != "neutral"]
+        
+        has_dominant_match = any(dom_emotion in user_backend_emotions for dom_emotion in dominant_emotions)
+        
+        if not has_dominant_match:
+            continue
+        
+        neutral_confidence = emotion_vector.get("neutral", 0)
+        if neutral_confidence >= max_confidence and neutral_confidence > 0.7:
+            continue
+        
+        match_info = calculate_emotion_match_score(user_emotions, emotion_vector)
+        dominance_boost = sum(1 for dom in dominant_emotions if dom in user_backend_emotions) * 0.3
+        final_score = match_info["final_score"] + dominance_boost
+        
+        place_with_score = {
+            **place,
+            "match_info": match_info,
+            "final_score": final_score,
+            "dominant_emotions": dominant_emotions,
+            "dominant_user_matches": [dom for dom in dominant_emotions if dom in user_backend_emotions]
+        }
+        scored_places.append(place_with_score)
+    
+    logger.info(f"Final results: {len(scored_places)} places after dominant emotion filtering")
+    
+    return sorted(scored_places, key=lambda x: x["final_score"], reverse=True)
+
+@app.post("/recommend_places")
+def recommend_places(user: UserPreference, top_k: int = 20):
+    try:
+        logger.info(f"Context-aware recommendation request for location: {user.latitude}, {user.longitude}")
+        logger.info(f"Selected emotions: {user.emotions}")
+        
+        places = list(places_collection.find({}, {"_id": 0}))
+        if not places:
+            return {"status": "error", "message": "No places in database. Use /fetch_places first."}
+        
+        recommendations = rank_places_by_emotion_priority(places, user.emotions)
+        recommendations = recommendations[:top_k]
+        
+        debug_info = []
+        for i, rec in enumerate(recommendations[:5]):
+            match_info = rec.get("match_info", {})
+            debug_info.append({
+                "rank": i + 1,
+                "place_name": rec.get("name", "Unknown"),
+                "category": rec.get("category", "Unknown"),
+                "context_snippet": rec.get("combined_context", "")[:100] + "..." if len(rec.get("combined_context", "")) > 100 else rec.get("combined_context", ""),
+                "final_score": match_info.get("final_score", 0),
+                "exact_matches": match_info.get("exact_matches", 0),
+                "matched_emotions": match_info.get("matched_emotions", []),
+                "all_emotions": list(rec.get("emotion_vector", {}).keys())
+            })
+        
+        logger.info(f"Generated {len(recommendations)} context-aware recommendations")
+        
+        clean_recommendations = []
+        for rec in recommendations:
+            clean_rec = {k: v for k, v in rec.items() if k not in ["match_info"]}
+            match_info = rec.get("match_info", {})
+            clean_rec["emotion_match_summary"] = {
+                "score": match_info.get("final_score", 0),
+                "matched_emotions": [emotion for emotion, confidence in match_info.get("matched_emotions", [])],
+                "match_count": match_info.get("exact_matches", 0)
+            }
+            clean_recommendations.append(clean_rec)
+        
+        return {
+            "status": "success",
+            "user_location": {"lat": user.latitude, "lon": user.longitude},
+            "user_emotions": user.emotions,
+            "recommendations": clean_recommendations,
+            "count": len(clean_recommendations),
+            "analysis_type": "context-aware",
+            "debug_info": debug_info
+        }
+    except Exception as e:
+        logger.error(f"Error in recommend_places: {e}")
+        return {"status": "error", "message": str(e)}
+
+# -------------------------------
+# 10. Additional API endpoints
+# -------------------------------
 @app.get("/test_emotion/{place_name}")
 def test_single_emotion_analysis(place_name: str, category: str = "restaurant", description: str = ""):
     try:
@@ -669,20 +804,13 @@ def test_single_emotion_analysis(place_name: str, category: str = "restaurant", 
 
 @app.get("/debug_place/{place_name}")
 def debug_place_matching(place_name: str, user_emotions: str = "Spirituality,Relaxation/Calm"):
-    """
-    Debug a specific place's emotion matching
-    """
     try:
-        # Parse user emotions
         emotions_list = [e.strip() for e in user_emotions.split(',')]
-        
-        # Find the place in database
         place = places_collection.find_one({"name": {"$regex": place_name, "$options": "i"}}, {"_id": 0})
         
         if not place:
             return {"error": f"Place '{place_name}' not found"}
         
-        # Calculate match score
         match_info = calculate_emotion_match_score(emotions_list, place.get("emotion_vector", {}))
         
         return {
@@ -699,9 +827,6 @@ def debug_place_matching(place_name: str, user_emotions: str = "Spirituality,Rel
 
 @app.get("/cache_status")
 def get_cache_status():
-    """
-    Get current cache status and location information (NEW)
-    """
     try:
         cached_location = get_cached_location()
         places_count = places_collection.count_documents({})
@@ -732,9 +857,6 @@ def get_cache_status():
 
 @app.post("/clear_cache")
 def clear_location_cache():
-    """
-    Clear the location cache (for testing purposes) (NEW)
-    """
     try:
         location_cache_collection.delete_many({})
         places_collection.delete_many({})
@@ -745,329 +867,82 @@ def clear_location_cache():
     except Exception as e:
         return {"status": "error", "message": str(e)}
 
-@app.get("/health")
-def health_check():
-    places_count = places_collection.count_documents({})
-    cached_location = get_cached_location()  # MODIFIED
-    
-    return {
-        "status": "healthy",
-        "emotion_model_loaded": emotion_analyzer.model is not None,
-        "reference_data_loaded": emotion_analyzer.reference_data is not None,
-        "places_in_database": places_count,
-        "has_location_cache": cached_location is not None,  # NEW
-        "cache_location": cached_location,  # NEW
-        "ready_for_recommendations": places_count > 0,
-        "model_type": "Context-aware SentenceTransformer with Location Caching"  # MODIFIED
-    }
-
-# -------------------------------
-# 9. Improved Recommendation System
-# -------------------------------
-def calculate_emotion_match_score(user_emotions: List[str], place_emotion_vector: Dict[str, float]) -> Dict[str, float]:
-    """
-    Calculate detailed matching scores between user emotions and place emotions
-    """
-    # Map frontend emotion names to backend emotion names
-    emotion_mapping = {
-    "Joy/Happy": ["joy, happy", "joy", "happy", "entertainment"],
-    "Relaxation/Calm": ["relaxation,calm", "relaxation", "calm", "comfort", "wellness"],
-    "Social Emotion": ["social", "food", "entertainment"],
-    "Excitement": ["excitement", "adventure", "entertainment"],
-    "Comfort": ["comfort", "wellness"],
-    "Adventure": ["adventure", "excitement", "energy"],
-    "Romance": ["luxury", "comfort"],  # No direct romance emotion found
-    "Luxury": ["luxury", "comfort"],
-    "Shopping": ["shopping", "retail", "convenience"],
-    "Nostalgia": ["comfort"],  # No direct nostalgia emotion found
-    "Energy": ["energy", "excitement", "adventure","wellness"],
-    "Wellness": ["wellness", "healthcare"],
-    "Entertainment": ["entertainment", "excitement", "joy, happy"],
-    "Exploration": ["adventure", "education", "excitement"],
-    "Fear": ["fear", "stress"],
-    "Creativity": ["education", "entertainment"],  # No direct creativity emotion found
-    "Spirituality": ["spirituality","relaxation,calm" ],
-    "Education": ["education", "professional"],
-    "Retail": ["retail", "shopping", "convenience"],
-    "Outdoors": ["adventure", "energy", "excitement"]
-}
-    
-    # Flatten user emotions to backend emotion names
-    user_backend_emotions = []
-    for emotion in user_emotions:
-        mapped = emotion_mapping.get(emotion, [emotion.lower()])
-        user_backend_emotions.extend(mapped)
-    
-    # Remove neutral emotions from place vector for scoring
-    filtered_place_vector = {k: v for k, v in place_emotion_vector.items() 
-                           if k != "neutral" and v > 0.2}
-    
-    if not filtered_place_vector:
-        return {
-            "exact_matches": 0,
-            "exact_match_score": 0.0,
-            "weighted_score": 0.0,
-            "coverage_score": 0.0,
-            "final_score": 0.0,
-            "matched_emotions": []
-        }
-    
-    # Calculate exact matches
-    exact_matches = []
-    exact_match_score = 0.0
-    
-    for user_emotion in user_backend_emotions:
-        if user_emotion in filtered_place_vector:
-            confidence = filtered_place_vector[user_emotion]
-            exact_matches.append((user_emotion, confidence))
-            exact_match_score += confidence
-    
-    # Calculate weighted score (prefers places with multiple matching emotions)
-    weighted_score = exact_match_score * (1 + 0.5 * len(exact_matches))
-    
-    # Calculate coverage score (how many of user's emotions are covered)
-    coverage_score = len(exact_matches) / len(set(user_backend_emotions)) if user_backend_emotions else 0
-    
-    # Calculate final score combining all factors
-    final_score = (
-        exact_match_score * 0.4 +
-        weighted_score * 0.4 +
-        coverage_score * 0.2
-    )
-    
-    return {
-        "exact_matches": len(exact_matches),
-        "exact_match_score": round(exact_match_score, 3),
-        "weighted_score": round(weighted_score, 3),
-        "coverage_score": round(coverage_score, 3),
-        "final_score": round(final_score, 3),
-        "matched_emotions": exact_matches
-    }
-
-def rank_places_by_emotion_priority(places: List[Dict], user_emotions: List[str]) -> List[Dict]:
-    """
-    Rank places with priority system - only include places where user emotions are dominant
-    """
-    scored_places = []
-    
-    print(f"Starting with {len(places)} places")
-    print(f"User selected emotions: {user_emotions}")
-    
-    # Map frontend emotion names to backend emotion names
-    emotion_mapping = {
-    "Joy/Happy": ["joy, happy", "joy", "happy", "entertainment"],
-    "Relaxation/Calm": ["relaxation,calm", "relaxation", "calm", "comfort", "wellness"],
-    "Social Emotion": ["social", "food", "entertainment"],
-    "Excitement": ["excitement", "adventure", "entertainment"],
-    "Comfort": ["comfort", "wellness"],
-    "Adventure": ["adventure", "excitement", "energy"],
-    "Romance": ["luxury", "comfort"],  # No direct romance emotion found
-    "Luxury": ["luxury", "comfort"],
-    "Shopping": ["shopping", "retail", "convenience"],
-    "Nostalgia": ["comfort"],  # No direct nostalgia emotion found
-    "Energy": ["energy", "excitement", "adventure","wellness"],
-    "Wellness": ["wellness", "healthcare"],
-    "Entertainment": ["entertainment", "excitement", "joy, happy"],
-    "Exploration": ["adventure", "education", "excitement"],
-    "Fear": ["fear", "stress"],
-    "Creativity": ["education", "entertainment"],  # No direct creativity emotion found
-    "Spirituality": ["spirituality","relaxation,calm"],
-    "Education": ["education", "professional"],
-    "Retail": ["retail", "shopping", "convenience"],
-    "Outdoors": ["adventure", "energy", "excitement"]
-}
-    
-    # Flatten user emotions to backend emotion names
-    user_backend_emotions = set()
-    for emotion in user_emotions:
-        mapped = emotion_mapping.get(emotion, [emotion.lower()])
-        user_backend_emotions.update(mapped)
-    
-    for place in places:
-        emotion_vector = place.get("emotion_vector", {})
-        place_name = place.get('name', 'Unknown')
-        
-        print(f"\nAnalyzing: {place_name}")
-        print(f"   Emotion vector: {emotion_vector}")
-        
-        # Skip places with no emotions or only neutral
-        if not emotion_vector or (len(emotion_vector) == 1 and "neutral" in emotion_vector):
-            print(f"Discarding {place_name} - No meaningful emotions")
-            continue
-        
-        # Find the dominant emotion(s) - emotions with the highest confidence
-        max_confidence = max(emotion_vector.values())
-        dominant_emotions = [emotion for emotion, confidence in emotion_vector.items() 
-                           if confidence == max_confidence and emotion != "neutral"]
-        
-        print(f"   Dominant emotions: {dominant_emotions} (confidence: {max_confidence})")
-        print(f"   User backend emotions: {user_backend_emotions}")
-        
-        # Check if ANY dominant emotion matches user emotions
-        has_dominant_match = any(dom_emotion in user_backend_emotions for dom_emotion in dominant_emotions)
-        
-        if not has_dominant_match:
-            print(f"Discarding {place_name} - No user emotions are dominant")
-            continue
-        
-        # If neutral is dominant with high confidence, be more strict
-        neutral_confidence = emotion_vector.get("neutral", 0)
-        if neutral_confidence >= max_confidence and neutral_confidence > 0.7:
-            print(f"Discarding {place_name} - Neutral is dominant with high confidence ({neutral_confidence})")
-            continue
-        
-        # Calculate match score for ranking
-        match_info = calculate_emotion_match_score(user_emotions, emotion_vector)
-        
-        # Boost score if user emotions are dominant
-        dominance_boost = sum(1 for dom in dominant_emotions if dom in user_backend_emotions) * 0.3
-        final_score = match_info["final_score"] + dominance_boost
-        
-        place_with_score = {
-            **place,
-            "match_info": match_info,
-            "final_score": final_score,
-            "dominant_emotions": dominant_emotions,
-            "dominant_user_matches": [dom for dom in dominant_emotions if dom in user_backend_emotions]
-        }
-        scored_places.append(place_with_score)
-        print(f"Keeping: {place_name} - Score: {final_score:.3f}, Dominant matches: {[dom for dom in dominant_emotions if dom in user_backend_emotions]}")
-    
-    print(f"\nFinal results: {len(scored_places)} places after dominant emotion filtering")
-    
-    # Sort by final score (descending)
-    return sorted(scored_places, key=lambda x: x["final_score"], reverse=True)
-@app.post("/recommend_places")
-def recommend_places(user: UserPreference, top_k: int = 20):
+@app.get("/unique_emotions")
+def get_unique_emotions():
     try:
-        print(f"Context-aware recommendation request for location: {user.latitude}, {user.longitude}")
-        print(f"Selected emotions: {user.emotions}")
-        
         places = list(places_collection.find({}, {"_id": 0}))
         if not places:
-            return {"status": "error", "message": "No places in database. Use /fetch_places first."}
+            return {"status": "error", "message": "No places found"}
         
-        # Use improved ranking system with context-aware analysis
-        recommendations = rank_places_by_emotion_priority(places, user.emotions)
+        unique_emotions = set()
+        for place in places:
+            for emotion_data in place.get("emotions", []):
+                emotion_name = emotion_data.get("emotion")
+                if emotion_name:
+                    unique_emotions.add(emotion_name)
         
-        # Limit results
-        recommendations = recommendations[:top_k]
-        
-        # Add debug information for first few results
-        debug_info = []
-        for i, rec in enumerate(recommendations[:5]):
-            match_info = rec.get("match_info", {})
-            debug_info.append({
-                "rank": i + 1,
-                "place_name": rec.get("name", "Unknown"),
-                "category": rec.get("category", "Unknown"),
-                "context_snippet": rec.get("combined_context", "")[:100] + "..." if len(rec.get("combined_context", "")) > 100 else rec.get("combined_context", ""),
-                "final_score": match_info.get("final_score", 0),
-                "exact_matches": match_info.get("exact_matches", 0),
-                "matched_emotions": match_info.get("matched_emotions", []),
-                "all_emotions": list(rec.get("emotion_vector", {}).keys())
-            })
-        
-        print(f"Generated {len(recommendations)} context-aware recommendations")
-        print("Top 5 recommendations debug info:")
-        for debug in debug_info:
-            print(f"   {debug['rank']}. {debug['place_name']} (Score: {debug['final_score']}, Matches: {debug['exact_matches']})")
-            print(f"      Context: {debug['context_snippet']}")
-        
-        # Clean up recommendations for response
-        clean_recommendations = []
-        for rec in recommendations:
-            clean_rec = {k: v for k, v in rec.items() if k not in ["match_info"]}
-            # Add summary of matching emotions for frontend
-            match_info = rec.get("match_info", {})
-            clean_rec["emotion_match_summary"] = {
-                "score": match_info.get("final_score", 0),
-                "matched_emotions": [emotion for emotion, confidence in match_info.get("matched_emotions", [])],
-                "match_count": match_info.get("exact_matches", 0)
-            }
-            clean_recommendations.append(clean_rec)
+        sorted_emotions = sorted(list(unique_emotions))
         
         return {
             "status": "success",
-            "user_location": {"lat": user.latitude, "lon": user.longitude},
-            "user_emotions": user.emotions,
-            "recommendations": clean_recommendations,
-            "count": len(clean_recommendations),
-            "analysis_type": "context-aware",
-            "debug_info": debug_info
+            "total_unique_emotions": len(sorted_emotions),
+            "unique_emotions": sorted_emotions
         }
     except Exception as e:
-        print(f"Error in recommend_places: {e}")
         return {"status": "error", "message": str(e)}
 
-# -------------------------------
-# 10. Legacy functions (kept for compatibility)
-# -------------------------------
-def cosine_similarity(vec1: Dict[str, float], vec2: Dict[str, float]) -> float:
-    """Legacy function kept for compatibility - not used in new recommendation system"""
-    common = set(vec1.keys()) & set(vec2.keys())
-    if not common:
-        return 0.0
-    dot = sum(vec1[k] * vec2[k] for k in common)
-    norm1 = sqrt(sum(v**2 for v in vec1.values()))
-    norm2 = sqrt(sum(v**2 for v in vec2.values()))
-    if norm1 == 0 or norm2 == 0:
-        return 0.0
-    return dot / (norm1 * norm2)
+@app.get("/context_stats")
+def get_context_analysis_stats():
+    try:
+        places = list(places_collection.find({}, {"_id": 0}))
+        if not places:
+            return {"status": "error", "message": "No places found"}
+        
+        stats = {
+            "total_places": len(places),
+            "places_with_descriptions": sum(1 for p in places if p.get("description", "").strip()),
+            "places_with_context": sum(1 for p in places if p.get("combined_context", "").strip()),
+            "avg_context_length": sum(len(p.get("combined_context", "")) for p in places) / len(places),
+            "unique_categories": len(set(p.get("category", "unknown") for p in places)),
+            "emotion_distribution": {},
+            "context_quality_indicators": {
+                "has_detailed_tags": sum(1 for p in places if len(p.get("osm_tags", {})) > 3),
+                "has_cuisine_info": sum(1 for p in places if p.get("osm_tags", {}).get("cuisine")),
+                "has_opening_hours": sum(1 for p in places if p.get("osm_tags", {}).get("opening_hours")),
+                "has_accessibility_info": sum(1 for p in places if p.get("osm_tags", {}).get("wheelchair"))
+            }
+        }
+        
+        all_emotions = {}
+        for place in places:
+            for emotion_data in place.get("emotions", []):
+                emotion = emotion_data.get("emotion")
+                if emotion in all_emotions:
+                    all_emotions[emotion] += 1
+                else:
+                    all_emotions[emotion] = 1
+        
+        stats["emotion_distribution"] = dict(sorted(all_emotions.items(), key=lambda x: x[1], reverse=True))
+        
+        return {
+            "status": "success",
+            "analysis_stats": stats,
+            "model_info": {
+                "model_name": "all-mpnet-base-v2",
+                "context_aware": True,
+                "reference_data_available": emotion_analyzer.reference_data is not None
+            }
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
-def create_emotion_vector_from_emotions(selected_emotions: List[str]) -> Dict[str, float]:
-    """Legacy function kept for compatibility - not used in new recommendation system"""
-    emotion_mapping = {
-    "Joy/Happy": ["joy, happy", "joy", "happy", "entertainment"],
-    "Relaxation/Calm": ["relaxation,calm", "relaxation", "calm", "comfort", "wellness"],
-    "Social Emotion": ["social", "food", "entertainment"],
-    "Excitement": ["excitement", "adventure", "entertainment"],
-    "Comfort": ["comfort", "wellness"],
-    "Adventure": ["adventure", "excitement", "energy"],
-    "Romance": ["luxury", "comfort"],  # No direct romance emotion found
-    "Luxury": ["luxury", "comfort"],
-    "Shopping": ["shopping", "retail", "convenience"],
-    "Nostalgia": ["comfort"],  # No direct nostalgia emotion found
-    "Energy": ["energy", "excitement", "adventure","wellness"],
-    "Wellness": ["wellness", "healthcare"],
-    "Entertainment": ["entertainment", "excitement", "joy, happy"],
-    "Exploration": ["adventure", "education", "excitement"],
-    "Fear": ["fear", "stress"],
-    "Creativity": ["education", "entertainment"],  # No direct creativity emotion found
-    "Spirituality": ["spirituality","relaxation,calm"],
-    "Education": ["education", "professional"],
-    "Retail": ["retail", "shopping", "convenience"],
-    "Outdoors": ["adventure", "energy", "excitement"]
-}
-
-    
-    vector = {}
-    base_weight = 1.0 / len(selected_emotions) if selected_emotions else 0
-    
-    for emotion in selected_emotions:
-        mapped_emotions = emotion_mapping.get(emotion, [emotion.lower()])
-        for mapped_emotion in mapped_emotions:
-            vector[mapped_emotion] = base_weight
-    
-    return vector
-
-# -------------------------------
-# 11. Additional Context-Aware Testing Endpoints
-# -------------------------------
 @app.get("/analyze_context/{place_name}")
 def analyze_place_context(place_name: str, category: str = "restaurant", 
                           description: str = "", lat: float = None, lon: float = None):
-    """
-    Analyze the contextual understanding of a place
-    """
     try:
-        # Create context-aware text
         context_text = emotion_analyzer.create_context_aware_text(place_name, category, description)
-        
-        # Get emotions
         emotions = emotion_analyzer.predict_emotions_for_place(place_name, category, description)
         
-        # If reference data is available, show similarity analysis
         similarity_info = None
         if emotion_analyzer.reference_data is not None:
             place_embedding = emotion_analyzer.model.encode(context_text, convert_to_tensor=True)
@@ -1099,95 +974,32 @@ def analyze_place_context(place_name: str, category: str = "restaurant",
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
-# Add this endpoint to your main.py
 
-@app.get("/unique_emotions")
-def get_unique_emotions():
-    """
-    Get all unique emotions currently classified by the backend
-    """
-    try:
-        places = list(places_collection.find({}, {"_id": 0}))
-        if not places:
-            return {"status": "error", "message": "No places found"}
-        
-        # Collect all unique emotions
-        unique_emotions = set()
-        for place in places:
-            for emotion_data in place.get("emotions", []):
-                emotion_name = emotion_data.get("emotion")
-                if emotion_name:
-                    unique_emotions.add(emotion_name)
-        
-        # Sort alphabetically for easier reading
-        sorted_emotions = sorted(list(unique_emotions))
-        
-        return {
-            "status": "success",
-            "total_unique_emotions": len(sorted_emotions),
-            "unique_emotions": sorted_emotions
-        }
-    except Exception as e:
-        return {"status": "error", "message": str(e)}
-@app.get("/context_stats")
-def get_context_analysis_stats():
-    """
-    Get statistics about the context-aware analysis
-    """
-    try:
-        places = list(places_collection.find({}, {"_id": 0}))
-        if not places:
-            return {"status": "error", "message": "No places found"}
-        
-        stats = {
-            "total_places": len(places),
-            "places_with_descriptions": sum(1 for p in places if p.get("description", "").strip()),
-            "places_with_context": sum(1 for p in places if p.get("combined_context", "").strip()),
-            "avg_context_length": sum(len(p.get("combined_context", "")) for p in places) / len(places),
-            "unique_categories": len(set(p.get("category", "unknown") for p in places)),
-            "emotion_distribution": {},
-            "context_quality_indicators": {
-                "has_detailed_tags": sum(1 for p in places if len(p.get("osm_tags", {})) > 3),
-                "has_cuisine_info": sum(1 for p in places if p.get("osm_tags", {}).get("cuisine")),
-                "has_opening_hours": sum(1 for p in places if p.get("osm_tags", {}).get("opening_hours")),
-                "has_accessibility_info": sum(1 for p in places if p.get("osm_tags", {}).get("wheelchair"))
-            }
-        }
-        
-        # Calculate emotion distribution
-        all_emotions = {}
-        for place in places:
-            for emotion_data in place.get("emotions", []):
-                emotion = emotion_data.get("emotion")
-                if emotion in all_emotions:
-                    all_emotions[emotion] += 1
-                else:
-                    all_emotions[emotion] = 1
-        
-        stats["emotion_distribution"] = dict(sorted(all_emotions.items(), key=lambda x: x[1], reverse=True))
-        
-        return {
-            "status": "success",
-            "analysis_stats": stats,
-            "model_info": {
-                "model_name": "all-mpnet-base-v2",
-                "context_aware": True,
-                "reference_data_available": emotion_analyzer.reference_data is not None
-            }
-        }
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+@app.get("/health")
+def health_check():
+    places_count = places_collection.count_documents({})
+    cached_location = get_cached_location()
+    
+    return {
+        "status": "healthy",
+        "emotion_model_loaded": emotion_analyzer.model is not None,
+        "reference_data_loaded": emotion_analyzer.reference_data is not None,
+        "places_in_database": places_count,
+        "has_location_cache": cached_location is not None,
+        "cache_location": cached_location,
+        "ready_for_recommendations": places_count > 0,
+        "model_type": "Context-aware SentenceTransformer with Location Caching"
+    }
 
 # -------------------------------
-# 12. Serve frontend - Modified for Render deployment
+# 11. Serve frontend for Hugging Face Spaces
 # -------------------------------
-# Check if frontend directory exists and mount it
 FRONTEND_DIR = os.path.join(os.getcwd(), "frontend")
 if os.path.exists(FRONTEND_DIR):
     app.mount("/frontend", StaticFiles(directory=FRONTEND_DIR), name="frontend")
-    print(f"Frontend mounted from: {FRONTEND_DIR}")
+    logger.info(f"Frontend mounted from: {FRONTEND_DIR}")
 else:
-    print("Frontend directory not found - API only mode")
+    logger.info("Frontend directory not found - API only mode")
 
 @app.get("/")
 def root():
@@ -1195,8 +1007,9 @@ def root():
         return RedirectResponse("/frontend/frontpage.html")
     else:
         return {
-            "message": "Enhanced Places Emotion Recommender API with Context-Aware Analysis and Location Caching",
+            "message": "Enhanced Places Emotion Recommender API - Hugging Face Spaces Version",
             "status": "running",
+            "deployment": "Hugging Face Spaces",
             "endpoints": {
                 "health": "/health",
                 "fetch_places": "/fetch_places (POST)",
@@ -1207,33 +1020,36 @@ def root():
                 "analyze_context": "/analyze_context/{place_name}",
                 "context_stats": "/context_stats",
                 "cache_status": "/cache_status",
-                "clear_cache": "/clear_cache (POST)"
-            }
+                "clear_cache": "/clear_cache (POST)",
+                "unique_emotions": "/unique_emotions"
+            },
+            "features": [
+                "Context-aware emotion analysis",
+                "Location-based caching",
+                "OpenStreetMap integration",
+                "MongoDB persistence",
+                "SentenceTransformer embeddings"
+            ]
         }
 
 # -------------------------------
-# 13. Modified for Render - Don't auto-open browser in production
-# -------------------------------
-def open_frontend():
-    """Only open browser in local development"""
-    if os.getenv("RENDER") != "true":  # Only open locally, not on Render
-        time.sleep(3)
-        webbrowser.open("http://127.0.0.1:8000/")
-
-# -------------------------------
-# 14. Run app - Modified for Render deployment
+# 12. Hugging Face Spaces startup configuration
 # -------------------------------
 if __name__ == "__main__":
-    print("Starting Enhanced Places Emotion Recommender System...")
-    print("Features: Context-aware analysis with Location Caching")
+    logger.info("Starting Enhanced Places Emotion Recommender System for Hugging Face Spaces...")
+    logger.info("Features: Context-aware analysis with Location Caching")
     
-    # Don't start browser thread in production
-    if os.getenv("RENDER") != "true":
-        threading.Thread(target=open_frontend, daemon=True).start()
-    
-    # Get port from environment (required for Render)
-    port = int(os.getenv("PORT", 8000))
+    # Hugging Face Spaces configuration
+    port = int(os.getenv("PORT", 7860))  # HF Spaces uses port 7860 by default
     host = "0.0.0.0"
     
-    print(f"Starting server on {host}:{port}")
-    uvicorn.run(app, host=host, port=port, reload=False)
+    logger.info(f"Starting server on {host}:{port} for Hugging Face Spaces")
+    
+    # Disable reload for production deployment
+    uvicorn.run(
+        app, 
+        host=host, 
+        port=port, 
+        reload=False,
+        log_level="info"
+    )
