@@ -1,0 +1,1061 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>RecAI - Smart Place Recommendations</title>
+    <style>
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+
+      body {
+        font-family: "Inter", "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+        background: linear-gradient(
+          135deg,
+          #0f2027 0%,
+          #203a43 50%,
+          #2c5364 100%
+        );
+        min-height: 100vh;
+        color: white;
+        overflow-x: hidden;
+      }
+
+      /* Header */
+      .header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 20px 50px;
+        position: relative;
+        z-index: 100;
+      }
+
+      .logo {
+        font-size: 28px;
+        font-weight: 800;
+        color: #00ff88;
+        text-shadow: 0 0 20px rgba(0, 255, 136, 0.3);
+      }
+
+      .nav {
+        display: flex;
+        gap: 30px;
+        align-items: center;
+      }
+
+      .nav a {
+        color: #b0c4de;
+        text-decoration: none;
+        font-weight: 500;
+        transition: all 0.3s ease;
+        position: relative;
+      }
+
+      .nav a:hover {
+        color: #00ff88;
+        text-shadow: 0 0 10px rgba(0, 255, 136, 0.5);
+      }
+
+      .get-started-btn {
+        background: linear-gradient(45deg, #00ff88, #00cc70);
+        color: #0f2027 !important;
+        padding: 12px 25px;
+        border-radius: 25px;
+        font-weight: 600;
+        box-shadow: 0 5px 20px rgba(0, 255, 136, 0.3);
+        transition: all 0.3s ease;
+      }
+
+      .get-started-btn:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 8px 30px rgba(0, 255, 136, 0.4);
+      }
+
+      /* Hero Section */
+      .hero-section {
+        text-align: center;
+        padding: 80px 50px;
+        max-width: 1200px;
+        margin: 0 auto;
+      }
+
+      .hero-title {
+        font-size: 4rem;
+        font-weight: 800;
+        line-height: 1.1;
+        margin-bottom: 30px;
+        background: linear-gradient(135deg, #ffffff, #00ff88);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        background-clip: text;
+      }
+
+      .gradient-text {
+        background: linear-gradient(45deg, #00ff88, #00ccff, #ff6b6b);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        background-clip: text;
+        animation: gradientShift 3s ease-in-out infinite;
+      }
+
+      @keyframes gradientShift {
+        0%,
+        100% {
+          filter: hue-rotate(0deg);
+        }
+        50% {
+          filter: hue-rotate(90deg);
+        }
+      }
+
+      .hero-subtitle {
+        font-size: 1.3rem;
+        line-height: 1.7;
+        color: #b0c4de;
+        margin-bottom: 60px;
+        opacity: 0.9;
+        max-width: 800px;
+        margin-left: auto;
+        margin-right: auto;
+        margin-bottom: 60px;
+      }
+
+      /* Status indicator */
+      .status-indicator {
+        position: fixed;
+        top: 20px;
+        right: 20px;
+        background: rgba(0, 0, 0, 0.7);
+        color: white;
+        padding: 10px 15px;
+        border-radius: 8px;
+        font-size: 0.9rem;
+        z-index: 1000;
+        backdrop-filter: blur(10px);
+      }
+
+      .status-indicator.loading {
+        background: rgba(255, 165, 0, 0.8);
+      }
+
+      .status-indicator.success {
+        background: rgba(0, 255, 136, 0.8);
+      }
+
+      .status-indicator.error {
+        background: rgba(255, 107, 107, 0.8);
+      }
+
+      /* Emotion Selection Section */
+      .emotion-section {
+        max-width: 1200px;
+        margin: 0 auto;
+        padding: 0 50px 80px;
+      }
+
+      .section-title {
+        text-align: center;
+        font-size: 2.2rem;
+        font-weight: 700;
+        margin-bottom: 20px;
+        color: #ffffff;
+      }
+
+      .section-subtitle {
+        text-align: center;
+        font-size: 1.1rem;
+        color: #b0c4de;
+        margin-bottom: 50px;
+        opacity: 0.9;
+      }
+
+      .emotion-grid {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 25px;
+        margin-bottom: 40px;
+      }
+
+      .emotion-card {
+        background: rgba(255, 255, 255, 0.1);
+        backdrop-filter: blur(20px);
+        border-radius: 20px;
+        padding: 25px;
+        text-align: center;
+        cursor: pointer;
+        transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        border: 2px solid transparent;
+        position: relative;
+        overflow: hidden;
+      }
+
+      .emotion-card:hover {
+        transform: translateY(-8px) scale(1.02);
+        background: rgba(255, 255, 255, 0.15);
+        border-color: rgba(0, 255, 136, 0.5);
+        box-shadow: 0 20px 40px rgba(0, 0, 0, 0.3);
+      }
+
+      .emotion-card.selected {
+        background: rgba(0, 255, 136, 0.2);
+        border-color: #00ff88;
+        box-shadow: 0 15px 35px rgba(0, 255, 136, 0.3);
+        transform: translateY(-5px) scale(1.05);
+      }
+
+      .emotion-card::before {
+        content: "";
+        position: absolute;
+        top: 0;
+        left: -100%;
+        width: 100%;
+        height: 100%;
+        background: linear-gradient(
+          90deg,
+          transparent,
+          rgba(255, 255, 255, 0.1),
+          transparent
+        );
+        transition: left 0.5s;
+      }
+
+      .emotion-card:hover::before {
+        left: 100%;
+      }
+
+      .emotion-image {
+        width: 80px;
+        height: 80px;
+        margin: 0 auto 15px;
+        background: linear-gradient(135deg, #00ff88, #00ccff);
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 2.5rem;
+        transition: all 0.3s ease;
+      }
+
+      .emotion-card:hover .emotion-image {
+        transform: rotate(10deg) scale(1.1);
+      }
+
+      .emotion-card.selected .emotion-image {
+        background: linear-gradient(135deg, #ff6b6b, #4ecdc4);
+        transform: rotate(15deg) scale(1.15);
+      }
+
+      .emotion-name {
+        font-size: 1.1rem;
+        font-weight: 600;
+        color: #ffffff;
+        margin-bottom: 8px;
+      }
+
+      .emotion-description {
+        font-size: 0.9rem;
+        color: #b0c4de;
+        opacity: 0.8;
+        line-height: 1.4;
+      }
+
+      /* Selection Counter */
+      .selection-counter {
+        text-align: center;
+        margin: 40px 0;
+        padding: 20px;
+        background: rgba(255, 255, 255, 0.05);
+        border-radius: 15px;
+        backdrop-filter: blur(10px);
+      }
+
+      .counter-text {
+        font-size: 1.1rem;
+        color: #00ff88;
+        font-weight: 600;
+      }
+
+      .selected-emotions {
+        display: flex;
+        justify-content: center;
+        gap: 15px;
+        margin-top: 15px;
+      }
+
+      .selected-emotion-tag {
+        background: linear-gradient(45deg, #00ff88, #00cc70);
+        color: #0f2027;
+        padding: 8px 16px;
+        border-radius: 20px;
+        font-size: 0.9rem;
+        font-weight: 600;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+
+      .remove-emotion {
+        cursor: pointer;
+        font-weight: bold;
+        font-size: 1.1rem;
+      }
+
+      .remove-emotion:hover {
+        color: #ff4757;
+      }
+
+      /* Proceed Button */
+      .proceed-section {
+        text-align: center;
+        margin-top: 50px;
+      }
+
+      .proceed-btn {
+        background: linear-gradient(45deg, #00ff88, #00cc70);
+        color: #0f2027;
+        border: none;
+        padding: 18px 40px;
+        border-radius: 30px;
+        font-size: 1.2rem;
+        font-weight: 700;
+        cursor: pointer;
+        transition: all 0.3s ease;
+        text-transform: uppercase;
+        letter-spacing: 1px;
+        box-shadow: 0 8px 25px rgba(0, 255, 136, 0.3);
+        opacity: 0.5;
+        pointer-events: none;
+      }
+
+      .proceed-btn.active {
+        opacity: 1;
+        pointer-events: auto;
+      }
+
+      .proceed-btn.active:hover {
+        transform: translateY(-3px);
+        box-shadow: 0 12px 35px rgba(0, 255, 136, 0.4);
+      }
+
+      /* Floating Elements */
+      .floating-element {
+        position: absolute;
+        background: rgba(0, 255, 136, 0.1);
+        border-radius: 50%;
+        animation: float 6s ease-in-out infinite;
+      }
+
+      .floating-element:nth-child(1) {
+        width: 80px;
+        height: 80px;
+        top: 20%;
+        right: 10%;
+        animation-delay: 0s;
+      }
+
+      .floating-element:nth-child(2) {
+        width: 120px;
+        height: 120px;
+        top: 60%;
+        left: 5%;
+        animation-delay: 2s;
+      }
+
+      .floating-element:nth-child(3) {
+        width: 60px;
+        height: 60px;
+        top: 80%;
+        right: 20%;
+        animation-delay: 4s;
+      }
+
+      @keyframes float {
+        0%,
+        100% {
+          transform: translateY(0px) rotate(0deg);
+        }
+        50% {
+          transform: translateY(-20px) rotate(180deg);
+        }
+      }
+
+      /* Responsive Design */
+      @media (max-width: 1024px) {
+        .emotion-grid {
+          grid-template-columns: repeat(2, 1fr);
+          gap: 20px;
+        }
+
+        .hero-title {
+          font-size: 3rem;
+        }
+
+        .section-title {
+          font-size: 1.8rem;
+        }
+      }
+
+      @media (max-width: 768px) {
+        .header {
+          padding: 15px 25px;
+        }
+
+        .nav {
+          display: none;
+        }
+
+        .hero-section,
+        .emotion-section {
+          padding-left: 25px;
+          padding-right: 25px;
+        }
+
+        .hero-title {
+          font-size: 2.5rem;
+        }
+
+        .emotion-grid {
+          grid-template-columns: 1fr;
+          gap: 15px;
+        }
+
+        .emotion-card {
+          padding: 20px;
+        }
+
+        .selected-emotions {
+          flex-direction: column;
+          align-items: center;
+        }
+      }
+
+      @media (max-width: 480px) {
+        .hero-title {
+          font-size: 2rem;
+        }
+
+        .hero-subtitle {
+          font-size: 1.1rem;
+        }
+
+        .section-title {
+          font-size: 1.5rem;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <!-- Status Indicator -->
+    <div
+      id="statusIndicator"
+      class="status-indicator"
+      style="display: none"
+    ></div>
+
+    <!-- Floating Background Elements -->
+    <div class="floating-element"></div>
+    <div class="floating-element"></div>
+    <div class="floating-element"></div>
+
+    <!-- Header -->
+    <header class="header">
+      <div class="logo">RecAI.</div>
+      <nav class="nav">
+        <a href="#" class="get-started-btn">Login</a>
+      </nav>
+    </header>
+
+    <!-- Hero Section -->
+    <section class="hero-section">
+      <h1 class="hero-title">
+        Discover amazing places in<br />
+        <span class="gradient-text">the blink of an eye</span>
+      </h1>
+      <p class="hero-subtitle">
+        Powered by advanced AI and emotional intelligence, RecAI understands
+        your mood and desires to recommend the perfect destinations. Whether
+        you're seeking adventure, relaxation, or cultural experiences, our
+        cutting-edge algorithms analyze your emotional state to suggest places
+        that resonate with your current feelings and create unforgettable
+        memories.
+      </p>
+    </section>
+
+    <!-- Emotion Selection Section -->
+    <section class="emotion-section">
+      <h2 class="section-title">what is your mood right now ?</h2>
+      <p class="section-subtitle">
+        Select up to 3 images that best describe your current mood
+      </p>
+
+      <div class="emotion-grid">
+        <div class="emotion-card" data-emotion="Excitement">
+          <div
+            class="emotion-image"
+            style="
+              background-image: url('https://media.gettyimages.com/id/2149106538/photo/travelling-carnival.jpg?s=612x612&w=0&k=20&c=29LBeitTjTAf5jcQmdozolxo7Jir2dfLxR7E_9276HA=');
+              background-size: cover;
+              background-position: center;
+            "
+          ></div>
+          <div class="emotion-name">Excitement</div>
+          <div class="emotion-description">Ready for thrilling adventures</div>
+        </div>
+
+        <div class="emotion-card" data-emotion="Joy/Happy">
+          <div
+            class="emotion-image"
+            style="
+              background-image: url('https://images.pexels.com/photos/994605/pexels-photo-994605.jpeg');
+              background-size: cover;
+              background-position: center;
+            "
+          ></div>
+          <div class="emotion-name">Joy/Happy</div>
+          <div class="emotion-description">Feeling cheerful and upbeat</div>
+        </div>
+
+        <div class="emotion-card" data-emotion="Comfort">
+          <div
+            class="emotion-image"
+            style="
+              background-image: url('https://www.hellolovelystudio.com/wp-content/uploads/2023/08/001-amberinteriors-lewis-bedroom-cozy-organic-california-cool.jpg');
+              background-size: cover;
+              background-position: center;
+            "
+          ></div>
+          <div class="emotion-name">Comfort</div>
+          <div class="emotion-description">Seeking cozy, familiar places</div>
+        </div>
+
+        <div class="emotion-card" data-emotion="Relaxation/Calm">
+          <div
+            class="emotion-image"
+            style="
+              background-image: url('https://images.stockcake.com/public/8/1/2/81272103-28fe-46eb-9122-dc6e4838a713_large/cozy-spa-shelf-stockcake.jpg');
+              background-size: cover;
+              background-position: center;
+            "
+          ></div>
+          <div class="emotion-name">Relaxation/Calm</div>
+          <div class="emotion-description">
+            Need peaceful, serene environments
+          </div>
+        </div>
+
+        <div class="emotion-card" data-emotion="Social Emotion">
+          <div
+            class="emotion-image"
+            style="
+              background-image: url('https://dynamic-media-cdn.tripadvisor.com/media/photo-o/2b/81/d5/a5/comemore-seu-aniversario.jpg?w=1400&h=-1&s=1');
+              background-size: cover;
+              background-position: center;
+            "
+          ></div>
+          <div class="emotion-name">Social Emotion</div>
+          <div class="emotion-description">Want to connect with others</div>
+        </div>
+
+        <div class="emotion-card" data-emotion="Adventure">
+          <div
+            class="emotion-image"
+            style="
+              background-image: url('https://media.istockphoto.com/id/1141196125/photo/hiking-in-the-allgaeu-alps.jpg?s=1024x1024&w=is&k=20&c=9nqFcswWHHv8s4vWTCXf_Axp1a_V-epy-wuvEqL_-7k=');
+              background-size: cover;
+              background-position: center;
+            "
+          ></div>
+          <div class="emotion-name">Adventure</div>
+          <div class="emotion-description">Craving new experiences</div>
+        </div>
+
+        <div class="emotion-card" data-emotion="Romance">
+          <div
+            class="emotion-image"
+            style="
+              background-image: url('https://www.oyorooms.com/blog/wp-content/uploads/2018/07/shutterstock_655466914.jpg');
+              background-size: cover;
+              background-position: center;
+            "
+          ></div>
+          <div class="emotion-name">Romance</div>
+          <div class="emotion-description">
+            Looking for intimate, romantic spots
+          </div>
+        </div>
+
+        <div class="emotion-card" data-emotion="Luxury">
+          <div
+            class="emotion-image"
+            style="
+              background-image: url('https://www.foxroach.com/blog/app/uploads/2020/09/LuxuryHome-Features-730x485-1.jpg');
+              background-size: cover;
+              background-position: center;
+            "
+          ></div>
+          <div class="emotion-name">Luxury</div>
+          <div class="emotion-description">
+            Desire premium, upscale experiences
+          </div>
+        </div>
+
+        <div class="emotion-card" data-emotion="Shopping">
+          <div
+            class="emotion-image"
+            style="
+              background-image: url('https://plus.unsplash.com/premium_photo-1683141052679-942eb9e77760?w=900&auto=format&fit=crop&q=60&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxzZWFyY2h8MXx8c2hvcHBpbmd8ZW58MHx8MHx8fDA%3D');
+              background-size: cover;
+              background-position: center;
+            "
+          ></div>
+          <div class="emotion-name">Shopping</div>
+          <div class="emotion-description">In the mood for retail therapy</div>
+        </div>
+
+        <div class="emotion-card" data-emotion="Nostalgia">
+          <div
+            class="emotion-image"
+            style="
+              background-image: url('https://images.stockcake.com/public/3/1/7/317bd95a-715e-4930-903a-4c552bf84953_large/vintage-cinema-interior-stockcake.jpg');
+              background-size: cover;
+              background-position: center;
+            "
+          ></div>
+          <div class="emotion-name">Nostalgia</div>
+          <div class="emotion-description">Yearning for familiar memories</div>
+        </div>
+
+        <div class="emotion-card" data-emotion="Energy">
+          <div
+            class="emotion-image"
+            style="
+              background-image: url('https://media.istockphoto.com/id/1806011581/photo/overjoyed-happy-young-people-dancing-jumping-and-singing-during-concert-of-favorite-group.jpg?s=612x612&w=0&k=20&c=cMFdhX403-yKneupEN-VWSfFdy6UWf1H0zqo6QBChP4=');
+              background-size: cover;
+              background-position: center;
+            "
+          ></div>
+          <div class="emotion-name">Energy</div>
+          <div class="emotion-description">High energy, need active places</div>
+        </div>
+
+        <div class="emotion-card" data-emotion="Wellness">
+          <div
+            class="emotion-image"
+            style="
+              background-image: url('https://www.doyou.com/wp-content/uploads/2021/01/yoga-poses-that-can-keep-you-from-falling-asleep-82841-1.jpg');
+              background-size: cover;
+              background-position: center;
+            "
+          ></div>
+          <div class="emotion-name">Wellness</div>
+          <div class="emotion-description">Focus on health and well-being</div>
+        </div>
+
+        <div class="emotion-card" data-emotion="Entertainment">
+          <div
+            class="emotion-image"
+            style="
+              background-image: url('https://pinstackbowl.com/wp-content/uploads/2021/08/Games-VR-Moto-1920x1080-72-dpi.jpg');
+              background-size: cover;
+              background-position: center;
+            "
+          ></div>
+          <div class="emotion-name">Entertainment</div>
+          <div class="emotion-description">Seeking fun and amusement</div>
+        </div>
+
+        <div class="emotion-card" data-emotion="Exploration">
+          <div
+            class="emotion-image"
+            style="
+              background-image: url('https://cdn.britannica.com/51/194651-050-747F0C18/Interior-National-Gallery-of-Art-Washington-DC.jpg?w=300');
+              background-size: cover;
+              background-position: center;
+            "
+          ></div>
+          <div class="emotion-name">Exploration</div>
+          <div class="emotion-description">Curious about new territories</div>
+        </div>
+
+        <div class="emotion-card" data-emotion="Fear">
+          <div
+            class="emotion-image"
+            style="
+              background-image: url('https://5.imimg.com/data5/SELLER/Default/2023/6/314968169/BK/DG/IA/14175955/haunted-house-setup-1000x1000.jpg');
+              background-size: cover;
+              background-position: center;
+            "
+          ></div>
+          <div class="emotion-name">Fear</div>
+          <div class="emotion-description">Need safe, secure environments</div>
+        </div>
+
+        <div class="emotion-card" data-emotion="Creativity">
+          <div
+            class="emotion-image"
+            style="
+              background-image: url('https://artignition.com/wp-content/uploads/elementor/thumbs/Home-Art-Studio-Ideas-and-Setup-q6i6nsjpjzsa07gtxxsy3k72unrme5lgvkf1gzl3fk.jpg');
+              background-size: cover;
+              background-position: center;
+            "
+          ></div>
+          <div class="emotion-name">Creativity</div>
+          <div class="emotion-description">Inspiring, artistic locations</div>
+        </div>
+
+        <div class="emotion-card" data-emotion="Spirituality">
+          <div
+            class="emotion-image"
+            style="
+              background-image: url('https://www.poojn.in/wp-content/uploads/2025/02/Govindaraja-Temple-History-Architecture-and-Significance.jpeg.jpg');
+              background-size: cover;
+              background-position: center;
+            "
+          ></div>
+          <div class="emotion-name">Spirituality</div>
+          <div class="emotion-description">Seeking spiritual connection</div>
+        </div>
+
+        <div class="emotion-card" data-emotion="Education">
+          <div
+            class="emotion-image"
+            style="
+              background-image: url('https://media.istockphoto.com/id/949118068/photo/books.jpg?s=612x612&w=0&k=20&c=1vbRHaA_aOl9tLIy6P2UANqQ27KQ_gSF-BH0sUjQ730=');
+              background-size: cover;
+              background-position: center;
+            "
+          ></div>
+          <div class="emotion-name">Education</div>
+          <div class="emotion-description">Want to learn and discover</div>
+        </div>
+
+        <div class="emotion-card" data-emotion="Retail">
+          <div
+            class="emotion-image"
+            style="
+              background-image: url('https://res.cloudinary.com/jll-am-cdn/images/c_scale,w_317,h_211,dpr_2/f_auto,q_auto/v1657088393/WPCOE/retailblog.jll.com/shutterstock_342916385-Philly-Market-East-Reading-terminal/shutterstock_342916385-Philly-Market-East-Reading-terminal.jpg?_i=AA');
+              background-size: cover;
+              background-position: center;
+            "
+          ></div>
+          <div class="emotion-name">Retail</div>
+          <div class="emotion-description">Commercial shopping districts</div>
+        </div>
+
+        <div class="emotion-card" data-emotion="Outdoors">
+          <div
+            class="emotion-image"
+            style="
+              background-image: url('https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcS3yOo13kbnGVlPURQAIlgw-y1H2WVUqjN8Ng&s');
+              background-size: cover;
+              background-position: center;
+            "
+          ></div>
+          <div class="emotion-name">Outdoors</div>
+          <div class="emotion-description">Nature and outdoor activities</div>
+        </div>
+      </div>
+
+      <!-- Selection Counter -->
+      <div class="selection-counter">
+        <div class="counter-text">
+          Selected: <span id="selectionCount">0</span> / 3 emotions
+        </div>
+        <div class="selected-emotions" id="selectedEmotions">
+          <!-- Selected emotion tags will appear here -->
+        </div>
+      </div>
+
+      <!-- Proceed Button -->
+      <div class="proceed-section">
+        <button class="proceed-btn" id="proceedBtn">
+          Get My Place Recommendations
+        </button>
+      </div>
+    </section>
+
+    <script>
+      // Global variables
+      let selectedEmotions = [];
+      let userLocation = null;
+      let placesLoaded = false;
+      const maxSelections = 3;
+
+      // Get DOM elements
+      const emotionCards = document.querySelectorAll(".emotion-card");
+      const selectionCount = document.getElementById("selectionCount");
+      const selectedEmotionsContainer =
+        document.getElementById("selectedEmotions");
+      const proceedBtn = document.getElementById("proceedBtn");
+      const statusIndicator = document.getElementById("statusIndicator");
+
+      // Status functions
+      function showStatus(message, type = "loading") {
+        statusIndicator.textContent = message;
+        statusIndicator.className = `status-indicator ${type}`;
+        statusIndicator.style.display = "block";
+
+        if (type !== "loading") {
+          setTimeout(() => {
+            statusIndicator.style.display = "none";
+          }, 3000);
+        }
+      }
+
+      function hideStatus() {
+        statusIndicator.style.display = "none";
+      }
+
+      // Get user location and fetch places on page load
+      window.addEventListener("load", function () {
+        if (navigator.geolocation) {
+          showStatus("Getting your location...", "loading");
+
+          navigator.geolocation.getCurrentPosition(
+            async function (position) {
+              userLocation = {
+                latitude: position.coords.latitude,
+                longitude: position.coords.longitude,
+              };
+
+              console.log("User location obtained:", userLocation);
+              showStatus("Fetching nearby places...", "loading");
+
+              try {
+                const response = await fetch(
+                  "http://127.0.0.1:8001/fetch_places",
+                  {
+                    method: "POST",
+                    headers: {
+                      "Content-Type": "application/json",
+                    },
+                    body: JSON.stringify(userLocation),
+                  }
+                );
+
+                const result = await response.json();
+
+                if (result.status === "success") {
+                  placesLoaded = true;
+                  console.log(
+                    `Successfully loaded ${result.total_places} places`
+                  );
+                  showStatus(
+                    `Found ${result.total_places} nearby places!`,
+                    "success"
+                  );
+                } else {
+                  console.error("Failed to fetch places:", result.message);
+                  showStatus("No places found nearby", "error");
+                }
+              } catch (error) {
+                console.error("Error fetching places:", error);
+                showStatus("Error loading places", "error");
+              }
+            },
+            function (error) {
+              console.error("Geolocation error:", error);
+              showStatus("Location access denied", "error");
+            }
+          );
+        } else {
+          showStatus("Geolocation not supported", "error");
+        }
+
+        // Add entrance animations
+        animateElements();
+      });
+
+      // Emotion selection logic
+      emotionCards.forEach((card) => {
+        card.addEventListener("click", function () {
+          const emotion = this.getAttribute("data-emotion");
+
+          if (this.classList.contains("selected")) {
+            // Remove selection
+            this.classList.remove("selected");
+            selectedEmotions = selectedEmotions.filter((e) => e !== emotion);
+          } else {
+            // Add selection if under limit
+            if (selectedEmotions.length < maxSelections) {
+              this.classList.add("selected");
+              selectedEmotions.push(emotion);
+            } else {
+              showAlert("You can select maximum 3 emotions");
+              return;
+            }
+          }
+
+          updateSelectionDisplay();
+        });
+      });
+
+      function updateSelectionDisplay() {
+        // Update counter
+        selectionCount.textContent = selectedEmotions.length;
+
+        // Update selected emotions display
+        selectedEmotionsContainer.innerHTML = "";
+        selectedEmotions.forEach((emotion) => {
+          const tag = document.createElement("div");
+          tag.className = "selected-emotion-tag";
+          tag.innerHTML = `
+            ${emotion} 
+            <span class="remove-emotion" onclick="removeEmotion('${emotion}')">×</span>
+          `;
+          selectedEmotionsContainer.appendChild(tag);
+        });
+
+        // Update proceed button state
+        if (selectedEmotions.length >= 1) {
+          proceedBtn.classList.add("active");
+        } else {
+          proceedBtn.classList.remove("active");
+        }
+      }
+
+      function removeEmotion(emotion) {
+        selectedEmotions = selectedEmotions.filter((e) => e !== emotion);
+        const card = document.querySelector(`[data-emotion="${emotion}"]`);
+        if (card) {
+          card.classList.remove("selected");
+        }
+        updateSelectionDisplay();
+      }
+
+      // Main recommendation function
+      proceedBtn.addEventListener("click", async function () {
+        if (selectedEmotions.length === 0) {
+          showAlert("Please select at least one emotion");
+          return;
+        }
+
+        if (!userLocation) {
+          showAlert("Location not available. Please allow location access.");
+          return;
+        }
+
+        if (!placesLoaded) {
+          showAlert("Places are still loading. Please wait a moment.");
+          return;
+        }
+
+        // Show loading state
+        proceedBtn.textContent = "Getting Recommendations...";
+        proceedBtn.style.opacity = "0.6";
+        proceedBtn.style.pointerEvents = "none";
+
+        const payload = {
+          latitude: userLocation.latitude,
+          longitude: userLocation.longitude,
+          emotions: selectedEmotions,
+          timestamp: new Date().toISOString(),
+        };
+
+        console.log("Sending payload:", payload);
+
+        try {
+          const response = await fetch(
+            "http://127.0.0.1:8001/recommend_places",
+            {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify(payload),
+            }
+          );
+
+          const result = await response.json();
+          console.log("Backend response:", result);
+
+          if (
+            result.status === "success" &&
+            result.recommendations &&
+            result.recommendations.length > 0
+          ) {
+            // Store recommendations and redirect
+            localStorage.setItem(
+              "recommendations",
+              JSON.stringify(result.recommendations)
+            );
+            localStorage.setItem(
+              "userEmotions",
+              JSON.stringify(selectedEmotions)
+            );
+            localStorage.setItem("userLocation", JSON.stringify(userLocation));
+
+            console.log("Redirecting to recommendations page...");
+            window.location.href = "recommended.html";
+          } else {
+            showAlert(
+              result.message ||
+                "No recommendations found. Try different emotions."
+            );
+          }
+        } catch (error) {
+          console.error("Error getting recommendations:", error);
+          showAlert("Failed to get recommendations. Please try again.");
+        } finally {
+          // Reset button
+          proceedBtn.textContent = "Get My Place Recommendations";
+          proceedBtn.style.opacity = "1";
+          proceedBtn.style.pointerEvents = "auto";
+        }
+      });
+
+      function showAlert(message) {
+        const alert = document.createElement("div");
+        alert.style.cssText = `
+          position: fixed;
+          top: 20px;
+          left: 50%;
+          transform: translateX(-50%);
+          background: linear-gradient(45deg, #ff6b6b, #ee5a24);
+          color: white;
+          padding: 15px 25px;
+          border-radius: 10px;
+          z-index: 1000;
+          box-shadow: 0 5px 20px rgba(0, 0, 0, 0.3);
+          font-weight: 600;
+          text-align: center;
+          max-width: 90vw;
+        `;
+        alert.textContent = message;
+        document.body.appendChild(alert);
+
+        setTimeout(() => {
+          alert.remove();
+        }, 4000);
+      }
+
+      function animateElements() {
+        const elements = document.querySelectorAll(
+          ".hero-title, .hero-subtitle, .section-title"
+        );
+        elements.forEach((el, index) => {
+          el.style.opacity = "0";
+          el.style.transform = "translateY(30px)";
+          setTimeout(() => {
+            el.style.transition = "all 0.8s cubic-bezier(0.4, 0, 0.2, 1)";
+            el.style.opacity = "1";
+            el.style.transform = "translateY(0)";
+          }, index * 200);
+        });
+
+        // Animate emotion cards
+        emotionCards.forEach((card, index) => {
+          card.style.opacity = "0";
+          card.style.transform = "translateY(50px)";
+          setTimeout(() => {
+            card.style.transition = "all 0.6s cubic-bezier(0.4, 0, 0.2, 1)";
+            card.style.opacity = "1";
+            card.style.transform = "translateY(0)";
+          }, 1000 + index * 100);
+        });
+      }
+    </script>
+  </body>
+</html>

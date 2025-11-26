@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>recAI - Recommendations</title>
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap"
+      rel="stylesheet"
+    />
+  </head>
+  <body>
+    <h2 class="title">🌟 recAI - Top 20 Recommended Places 🌟</h2>
+    <div id="recommendationsContainer" class="grid"></div>
+
+    <style>
+      body {
+        font-family: "Inter", sans-serif;
+        background: #091921;
+        margin: 0;
+        padding: 40px 20px;
+        color: #eee;
+      }
+
+      .title {
+        text-align: center;
+        margin-bottom: 40px;
+        font-size: 30px;
+        font-weight: 600;
+        color: #7d8ca1;
+        font-family: "Inter", sans-serif;
+      }
+
+      .grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+        gap: 24px;
+        max-width: 1280px;
+        margin: 0 auto;
+      }
+
+      .card {
+        background-color: #0f222f;
+        padding: 24px 28px;
+        border-radius: 16px;
+        box-shadow: 0px 12px 17px rgba(17, 32, 51, 0.65);
+        color: white;
+        transition: transform 0.3s ease, box-shadow 0.3s ease;
+        font-family: "Inter", sans-serif;
+        position: relative;
+      }
+
+      .card:hover {
+        transform: translateY(-7px);
+        box-shadow: 0 15px 25px rgba(25, 45, 65, 0.8);
+      }
+
+      .rank-badge {
+        position: absolute;
+        top: 16px;
+        right: 16px;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        padding: 6px 12px;
+        border-radius: 20px;
+        font-size: 14px;
+        font-weight: 700;
+      }
+
+      .card h3 {
+        font-size: 22px;
+        font-weight: 700;
+        color: #82ccdd;
+        margin-top: 0;
+        margin-bottom: 12px;
+        padding-right: 60px;
+      }
+
+      .card p {
+        font-size: 15px;
+        line-height: 1.5;
+        margin: 8px 0;
+        color: #c6d0db;
+      }
+
+      .card b {
+        color: #a3b1c1;
+        font-weight: 600;
+      }
+
+      .score-section {
+        background: rgba(130, 204, 221, 0.1);
+        padding: 12px 16px;
+        border-radius: 8px;
+        margin: 12px 0;
+        border-left: 4px solid #82ccdd;
+      }
+
+      .score-title {
+        color: #82ccdd;
+        font-weight: 700;
+        font-size: 16px;
+        margin-bottom: 8px;
+      }
+
+      .score-item {
+        display: flex;
+        justify-content: space-between;
+        margin: 4px 0;
+        font-size: 14px;
+      }
+
+      .score-label {
+        color: #a3b1c1;
+      }
+
+      .score-value {
+        color: #82ccdd;
+        font-weight: 600;
+      }
+
+      .matched-emotions {
+        background: rgba(102, 126, 234, 0.15);
+        padding: 10px 14px;
+        border-radius: 8px;
+        margin: 12px 0;
+        border-left: 4px solid #667eea;
+      }
+
+      .emotion-tag {
+        display: inline-block;
+        background: rgba(130, 204, 221, 0.2);
+        color: #82ccdd;
+        padding: 4px 10px;
+        border-radius: 12px;
+        font-size: 13px;
+        margin: 4px 4px 4px 0;
+      }
+
+      .no-data {
+        text-align: center;
+        color: #7d8ca1;
+        font-size: 18px;
+        padding: 40px;
+      }
+    </style>
+
+    <script>
+      const recs = JSON.parse(localStorage.getItem("recommendations")) || [];
+      const container = document.getElementById("recommendationsContainer");
+
+      if (recs.length === 0) {
+        container.innerHTML =
+          '<p class="no-data">No recommendations available. Please go back and get recommendations first.</p>';
+      } else {
+        recs.forEach((place, index) => {
+          const card = document.createElement("div");
+          card.className = "card";
+
+          // Extract match score data
+          const matchScore = place.match_score || {};
+          const finalScore = matchScore.final_score || 0;
+          const exactMatchScore = matchScore.exact_match_score || 0;
+          const weightedScore = matchScore.weighted_score || 0;
+          const coverageScore = matchScore.coverage_score || 0;
+          const matchedEmotions = matchScore.matched_emotions || [];
+          const matchCount = matchScore.exact_matches_count || 0;
+
+          // Build matched emotions HTML
+          let matchedEmotionsHtml = "";
+          if (matchedEmotions.length > 0) {
+            matchedEmotionsHtml = `
+            <div class="matched-emotions">
+              <div class="score-title">🎯 Matched Your Emotions:</div>
+              ${matchedEmotions
+                .map(
+                  (e) =>
+                    `<span class="emotion-tag">${
+                      e.emotion
+                    } (${e.confidence.toFixed(2)})</span>`
+                )
+                .join("")}
+            </div>
+          `;
+          }
+
+          // Build all emotions display
+          const allEmotionsHtml = place.emotions
+            .map((e) => `${e.emotion} (${e.confidence.toFixed(2)})`)
+            .join(", ");
+
+          card.innerHTML = `
+          <div class="rank-badge">#${index + 1}</div>
+          <h3>${place.name}</h3>
+          <p><b>Category:</b> ${place.category}</p>
+          <p><b>Description:</b> ${place.description}</p>
+          
+          <div class="score-section">
+            <div class="score-title">📊 Match Scores</div>
+            <div class="score-item">
+              <span class="score-label">Overall Match Score:</span>
+              <span class="score-value">${finalScore.toFixed(3)}</span>
+            </div>
+            <div class="score-item">
+              <span class="score-label">Exact Match Score:</span>
+              <span class="score-value">${exactMatchScore.toFixed(3)}</span>
+            </div>
+            <div class="score-item">
+              <span class="score-label">Weighted Score:</span>
+              <span class="score-value">${weightedScore.toFixed(3)}</span>
+            </div>
+            <div class="score-item">
+              <span class="score-label">Coverage Score:</span>
+              <span class="score-value">${coverageScore.toFixed(3)}</span>
+            </div>
+            <div class="score-item">
+              <span class="score-label">Emotions Matched:</span>
+              <span class="score-value">${matchCount}</span>
+            </div>
+          </div>
+          
+          ${matchedEmotionsHtml}
+          
+          <p><b>All Place Emotions:</b> ${allEmotionsHtml}</p>
+          <p><b>Location:</b> (${place.lat.toFixed(6)}, ${place.lon.toFixed(
+            6
+          )})</p>
+        `;
+          container.appendChild(card);
+        });
+      }
+    </script>
+  </body>
+</html>
