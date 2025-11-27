@@ -731,10 +731,8 @@ def fetch_and_store_places_with_emotions(loc: Location):
 @app.get("/test_api")
 def test_overpass_api():
     """Test if Overpass APIs are accessible"""
-    test_urls = [
-        "https://overpass.kumi.systems/api/interpreter",
+    test_urls = [ 
         "https://overpass-api.de/api/interpreter", 
-        "https://overpass.openstreetmap.ru/api/interpreter"
     ]
     
     results = {}
